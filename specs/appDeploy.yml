@@ -15,8 +15,6 @@ spec:
       labels:
         app: ${APP_LABEL}
     spec:
-      imagePullSecrets:
-        - name: private-registry-key
       containers:
         - name: ${APP_LABEL}
           image: ${APP_IMG}:${APP_TAG}

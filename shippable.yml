@@ -1,61 +1,42 @@
 resources:
-# REPO of kube configs
-  - name: cd_k8s_config_repo
+# REPO of Scripts
+  - name: cd_k8s_repo
     type: gitRepo
     integration: "drship_github"
     versionTemplate:
       sourceName: "devops-recipes/cd_k8s_kubectl"
       branch: master
 
-# kubernetes CLI Config
-  - name: cd_k8s_kube_cli
+# Kubernetes Config
+  - name: cd_k8s_kube_config
     type: cliConfig
     integration: "drship_kube"
 
-# Docker registry integration
-  - name: cd_k8s_dr
-    type: integration
-    # replace drship_dockerregistry with your Docker registry integration name
-    integration: drship_artifactory_docker
-
 jobs:
-  - name: create_image_pull_secret_jfrog
-    type: runSh
-    steps:
-      - IN: cd_k8s_kube_cli
-      - IN: cd_k8s_dr
-      - TASK:
-          script:
-            # Delete and create the secret
-            - kubectl delete secret private-registry-key 2>/dev/null || echo "secret does not exist"
-            - kubectl create secret docker-registry private-registry-key --docker-username="$CD_K8S_DR_INTEGRATION_USERNAME" --docker-password="CD_K8S_DR_INTEGRATION_PASSWORD" --docker-email="$CD_K8S_DR_INTEGRATION_EMAIL" --docker-server="$CD_K8S_DR_INTEGRATION_URL"/
-
   - name: deploy_app_kctl_kube
     type: runSh
-    dependencyMode: strict
     steps:
-      - IN: node_app_jfrog_img_jfrog # defined here https://github.com/devops-recipes/node_app/blob/master/shippable.yml
-      - IN: cd_k8s_kube_cli
+      - IN: node_app_img_dh # defined here https://github.com/devops-recipes/node_app/blob/master/shippable.yml
+      - IN: cd_k8s_kube_config
         switch: off
-      - IN: cd_k8s_config_repo
+      - IN: cd_k8s_repo
         switch: off
       - TASK:
-          name: deploy_jfrog_app
+          name: deploy_app
           runtime:
             options:
               env:
-                - APP_LABEL: "kctl-jfrog-app"
+                - APP_LABEL: "k8s-app"
           script:
-            - pushd $(shipctl get_resource_state "cd_k8s_config_repo")
+            - pushd $(shipctl get_resource_state "cd_k8s_repo")
             - cd specs
-            - export APP_IMG=$(shipctl get_resource_version_key node_app_jfrog_img_jfrog sourceName)
-            - export APP_TAG=$(shipctl get_resource_version_name node_app_jfrog_img_jfrog)
+            - export APP_IMG=$(shipctl get_resource_version_key node_app_img_dh sourceName)
+            - export APP_TAG=$(shipctl get_resource_version_name node_app_img_dh)
             - shipctl replace appDeploy.yml appSvc.yml
             - kubectl delete  -f ./appDeploy.yml 2>/dev/null || echo ""
             - kubectl delete -f ./appSvc.yml  2>/dev/null || echo ""
-            - kubectl create -o json -f ./appDeploy.yml >> kube_output.json
-            - kubectl create -o json -f ./appSvc.yml >> kube_output.json
-            - cat kube_output.json
+            - kubectl create -o json -f ./appDeploy.yml
+            - kubectl create -o json -f ./appSvc.yml
             - popd
     flags:
       - cd
